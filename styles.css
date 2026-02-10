@@ -88,6 +88,7 @@ h1 { margin: 0; font-size: clamp(1.3rem, 3.5vw, 2rem); }
 .small-line { font-size: 0.76rem; color: var(--muted); }
 .small-value { font-size: 0.95rem; font-weight: 700; }
 .thread-swatch { width: 0.7rem; height: 0.7rem; border-radius: 50%; border: 1px solid var(--border); display: inline-block; flex-shrink: 0; }
+.thread-swatch-default { background: #9aa3b2; }
 .thread-boundary { position: absolute; top: 0.28rem; right: 0.28rem; display: inline-flex; }
 
 .primary-controls .control-cluster {

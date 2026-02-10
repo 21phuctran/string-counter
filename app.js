@@ -68,7 +68,6 @@ function parseStepFile(fileText) {
     if (/^[0-9]+$/.test(t)) {
       steps.push({
         value: Number(t),
-        text: t,
         rawLineNumber: i + 1,
       });
       continue;
@@ -136,13 +135,13 @@ function setSlot(el, stepObj, isCurrent = false, showThreadBoundary = false) {
 
   const thread = getThreadForRawLine(stepObj.rawLineNumber);
   const threadSwatch = thread
-    ? `<span class="thread-swatch" style="background-color: rgb(${thread.r}, ${thread.g}, ${thread.b})" title="Thread color rgb(${thread.r}, ${thread.g}, ${thread.b})" aria-hidden="true"></span>`
-    : "";
+    ? `<span class="thread-swatch" style="background-color: rgb(${thread.r}, ${thread.g}, ${thread.b})" title="Thread [${thread.r},${thread.g},${thread.b}]" aria-hidden="true"></span>`
+    : `<span class="thread-swatch thread-swatch-default" aria-hidden="true"></span>`;
 
   if (isCurrent) {
     const threadLine = thread
-      ? `<div class="current-thread">${threadSwatch}<span>Thread color: rgb(${thread.r}, ${thread.g}, ${thread.b})</span></div>`
-      : `<div class="current-thread">Thread color: —</div>`;
+      ? `<div class="current-thread">${threadSwatch}<span>Thread: [${thread.r},${thread.g},${thread.b}]</span></div>`
+      : `<div class="current-thread">${threadSwatch}<span>Thread: —</span></div>`;
     el.innerHTML = `
       <div class="current-line">Line ${stepObj.rawLineNumber}</div>
       <div class="current-value">${stepObj.value}</div>
