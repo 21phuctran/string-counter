@@ -3,76 +3,75 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>String Art Line Tracker</title>
+    <title>String Art Progress Tracker</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="app-header">
-      <h1>String Art Line Tracker</h1>
-      <p class="subtitle">Track by raw file line number + nail number.</p>
+      <h1>String Art Progress Tracker</h1>
+      <p class="subtitle">Load your instruction file and track pace, progress, and sessions.</p>
     </header>
 
-    <main class="layout" aria-label="String art tracker app">
-      <section class="main-panel">
+    <main class="layout">
+      <section class="main-panel" aria-label="Progress tracker">
         <section class="card file-card" aria-label="Instruction file loader">
           <div class="file-row">
-            <label for="fileInput">Instruction file (.txt)</label>
-            <input id="fileInput" type="file" accept=".txt,text/plain" />
+            <label for="fileInput" class="file-label">Instruction file (.txt)</label>
+            <input id="fileInput" type="file" accept=".txt,text/plain" aria-label="Upload instruction text file" />
           </div>
           <div id="fileMeta" class="file-meta" aria-live="polite">No file loaded.</div>
           <div id="errorMessage" class="error" role="alert" aria-live="assertive"></div>
-          <div id="hintMessage" class="hint" aria-live="polite"></div>
         </section>
 
-        <section class="card" aria-label="5-step preview navigator">
-          <div class="navigator" role="group" aria-label="Previous and upcoming steps">
-            <div class="nav-step small" id="slotPrev2"></div>
-            <div class="nav-step small" id="slotPrev1"></div>
-            <div class="nav-step current" id="slotCurrent"></div>
-            <div class="nav-step small" id="slotNext1"></div>
-            <div class="nav-step small" id="slotNext2"></div>
-          </div>
-        </section>
-
-        <section class="card primary-controls" aria-label="Primary navigation controls">
-          <div class="control-cluster">
-            <button id="backBtn" class="btn btn-back" aria-label="Go back one step">Back</button>
-            <button id="nextBtn" class="btn btn-next" aria-label="Go forward one step">Next</button>
-          </div>
-
-          <div class="control-row">
-            <label for="jumpInput">Jump to RAW line</label>
-            <input id="jumpInput" type="number" min="1" step="1" inputmode="numeric" />
-            <button id="jumpBtn" class="btn">Go</button>
-          </div>
-
-          <div class="control-row">
-            <button id="startPauseBtn" class="btn">Start</button>
-            <button id="endSessionBtn" class="btn btn-warning">End Session</button>
-            <button id="resetBtn" class="btn btn-danger">Reset</button>
+        <section class="card navigator-card" aria-label="Step navigator">
+          <div class="navigator" id="navigator" role="group" aria-label="Current and nearby steps">
+            <div class="nav-step small" id="slotPrev2" aria-label="Two steps back"></div>
+            <div class="nav-step small" id="slotPrev1" aria-label="Previous step"></div>
+            <div class="nav-step current" id="slotCurrent" aria-label="Current step"></div>
+            <div class="nav-step small" id="slotNext1" aria-label="Next step"></div>
+            <div class="nav-step small" id="slotNext2" aria-label="Two steps ahead"></div>
           </div>
         </section>
 
-        <details class="card info-drawer" aria-label="Progress and timing info">
-          <summary>Info</summary>
-          <div class="info-grid">
+        <section class="card metrics-card" aria-label="Progress and timing metrics">
+          <div class="metrics-grid">
             <div>
+              <h2>Progress</h2>
               <p id="stepText" class="metric-text">Step 0 of 0</p>
               <p id="percentText" class="metric-text">0.0% complete</p>
               <div class="progress" aria-hidden="true">
                 <div id="progressBar" class="progress-bar"></div>
               </div>
-              <p id="remainingText" class="metric-text">Remaining: 0</p>
+              <p id="remainingText" class="metric-text">Remaining steps: 0</p>
               <p id="etaText" class="metric-text">ETA: —</p>
             </div>
             <div>
+              <h2>Timing</h2>
               <p id="elapsedText" class="metric-text">Elapsed: 00:00</p>
               <p id="currentPaceText" class="metric-text">Current pace: — spm</p>
               <p id="averagePaceText" class="metric-text">Average pace: — spm</p>
               <p id="trendText" class="metric-text">Trend: —</p>
             </div>
           </div>
-        </details>
+        </section>
+
+        <section class="card controls-card" aria-label="Main controls">
+          <div class="controls-row">
+            <button id="backBtn" class="btn" aria-label="Go to previous step">Back</button>
+            <button id="nextBtn" class="btn btn-primary" aria-label="Go to next step">Next</button>
+            <button id="startPauseBtn" class="btn" aria-label="Start or pause session timer">Start</button>
+            <button id="endSessionBtn" class="btn btn-warning" aria-label="End current session">End Session</button>
+            <button id="resetBtn" class="btn btn-danger" aria-label="Reset progress">Reset</button>
+          </div>
+
+          <div class="controls-row jump-row">
+            <label for="jumpInput">Jump to step</label>
+            <input id="jumpInput" type="number" min="1" step="1" inputmode="numeric" aria-label="Step number" />
+            <button id="jumpBtn" class="btn">Go</button>
+          </div>
+
+          <button id="nextBottomBtn" class="btn btn-primary btn-bottom" aria-label="Go to next step">Next</button>
+        </section>
       </section>
 
       <aside class="side-panel">
@@ -93,7 +92,7 @@
           </div>
           <div class="settings-row">
             <label for="notesInput">Current session notes</label>
-            <textarea id="notesInput" rows="3" placeholder="Optional notes"></textarea>
+            <textarea id="notesInput" rows="3" placeholder="Optional notes saved with this session"></textarea>
           </div>
           <div class="settings-row">
             <button id="clearStorageBtn" class="btn btn-danger">Clear Storage</button>
