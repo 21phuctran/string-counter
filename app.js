@@ -62,7 +62,11 @@ function parseStepFile(fileText) {
   for (let i = 0; i < rawLines.length; i += 1) {
     const t = rawLines[i].trim(); // 3)
     if (/^[0-9]+$/.test(t)) {
-      steps.push({ value: Number.parseInt(t, 10), text: t, rawLineNumber: i + 1 });
+      steps.push({
+        value: Number(t),
+        text: t,
+        rawLineNumber: i + 1,
+      });
     }
   }
   return { rawLines, steps };
@@ -460,11 +464,6 @@ function handleJumpToRawLine() {
   }
 
   dom.errorMessage.textContent = "No step on that raw line.";
-  const nextIndex = state.steps.findIndex((s) => s.rawLineNumber > rawLine);
-  if (nextIndex >= 0) {
-    dom.hintMessage.textContent = `Jumped to nearest next step at raw line ${state.steps[nextIndex].rawLineNumber}.`;
-    moveStep(nextIndex, nextIndex >= state.stepIndex ? "next" : "back");
-  }
 }
 
 function handleFileUpload(file) {

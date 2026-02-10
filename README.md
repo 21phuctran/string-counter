@@ -1,65 +1,58 @@
-# String Art Progress Tracker
+# String Art Line Tracker
 
-A lightweight static web app for tracking progress through a plain-text string art instruction list.
+Static web app (GitHub Pages compatible) for string-art workflows where valid steps are numeric-only lines in a text file.
 
-## Features
+## Supported file format (fixed)
 
-- Upload local `.txt` instruction files (no backend required)
-- Parses one non-empty line per step, trims trailing whitespace, preserves interior text
-- 5-item navigator (previous 2, current, next 2)
-- Progress status: step number, percent, progress bar, remaining, ETA
-- Session timing and pace metrics
-  - Current pace from recent transitions (window size configurable in `app.js`)
-  - Overall average pace during active session time
-  - Trend indicator (faster/slower)
-- Session lifecycle
-  - Start / Pause / End Session
-  - Resets can auto-end the active session
-- Session history panel with expandable details and notes
-- CSV export
-  - Current session transitions
-  - Session summary history
-- Keyboard shortcuts
-  - `Right Arrow` / `Space`: Next
-  - `Left Arrow`: Back
-- Mobile-friendly controls with large tap targets and bottom Next button
-- Accessibility-minded semantic layout, focus states, and keyboard support
-- Local persistence via `localStorage`
+The parser assumes:
+- file may include header/metadata lines
+- valid steps are lines containing only a single integer (e.g. `74`)
+- non-numeric lines are ignored for steps, but still count as raw lines
 
-## GitHub Pages setup
+Parsing logic in `app.js` is implemented exactly as:
+1. `rawLines = fileText.split(/\r?\n/)`
+2. iterate raw lines
+3. `t = rawLines[i].trim()`
+4. when `t` matches `/^[0-9]+$/`, push:
+   - `{ value: parseInt(t, 10), text: t, rawLineNumber: i + 1 }`
 
-Because the app is fully static, it works directly on GitHub Pages.
+## Main behavior
 
-1. Push this repository to GitHub.
-2. In repository settings, open **Pages**.
-3. Set source to your main branch (root folder).
-4. Save and open the published URL.
+- 5-slot navigator: prev2, prev1, CURRENT, next1, next2
+- Current step emphasizes:
+  - `RAW <lineNumber>`
+  - `Nail <value>`
+- Next/Back move through parsed `steps[]` using `stepIndex`
+- Jump input uses **raw line number**
+  - exact step line: jumps directly
+  - non-step line: shows “No step on that raw line”, then jumps to nearest next step line when available
 
-## Local development
+## Timing/session behavior
 
-You can run locally with any static file server.
+- Step position tracking always works (session running or not)
+- Timestamps/transitions are recorded only while session is running
+- Current pace uses last `K=10` **Next** presses
+- Session history stores timing summary + start/end indices + start/end raw line numbers
+
+## Persistence
+
+Saved in `localStorage`:
+- `stepIndex`
+- raw file text (then re-parse on restore to preserve raw line mapping)
+- parsed `steps[]`
+- session state/history
+- display settings
+
+## Export
+
+- Current session transitions CSV
+- Session history summary CSV
+
+## Run locally
 
 ```bash
 python3 -m http.server 8000
 ```
 
 Then open `http://localhost:8000`.
-
-## Usage
-
-1. Upload a text file where each non-empty line is a step.
-2. Use **Start** to begin a session timer.
-3. Use **Next**/**Back** (or keyboard shortcuts) to navigate steps.
-4. Add optional notes for the active session.
-5. End session to save it in history.
-6. Use export buttons to download CSV files.
-7. Toggle high contrast and large fonts in Settings.
-8. Use **Clear Storage** to erase local saved state.
-
-## Key implementation notes
-
-- All logic lives in `app.js` (vanilla JavaScript, no external frameworks)
-- UI structure is in `index.html`
-- Styling and responsive behavior are in `styles.css`
-- Persistence key: `stringArtTrackerStateV1`
 
