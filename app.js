@@ -7,6 +7,7 @@ const state = {
   rawFileText: "",
   rawLineCount: 0,
   steps: [], // [{ value, text, rawLineNumber }]
+  threadMarkers: [], // [{ rawLineNumber, r, g, b }]
   stepIndex: 0,
   highContrast: false,
   largeFont: false,
@@ -59,6 +60,9 @@ function getNowIso() {
 function parseStepFile(fileText) {
   const rawLines = fileText.split(/\r?\n/); // 1)
   const steps = []; // 2)
+  const threadMarkers = [];
+  const threadRegex = /^Thread:\s*\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\s*$/;
+
   for (let i = 0; i < rawLines.length; i += 1) {
     const t = rawLines[i].trim(); // 3)
     if (/^[0-9]+$/.test(t)) {
@@ -67,9 +71,37 @@ function parseStepFile(fileText) {
         text: t,
         rawLineNumber: i + 1,
       });
+      continue;
+    }
+
+    const threadMatch = t.match(threadRegex);
+    if (threadMatch) {
+      threadMarkers.push({
+        rawLineNumber: i + 1,
+        r: Number(threadMatch[1]),
+        g: Number(threadMatch[2]),
+        b: Number(threadMatch[3]),
+      });
     }
   }
-  return { rawLines, steps };
+  return { rawLines, steps, threadMarkers };
+}
+
+function getThreadForRawLine(rawLineNumber) {
+  if (!rawLineNumber) return null;
+  let current = null;
+  for (const marker of state.threadMarkers) {
+    if (marker.rawLineNumber <= rawLineNumber) current = marker;
+    else break;
+  }
+  return current;
+}
+
+function startsNewThreadSection(stepIndex) {
+  if (stepIndex < 0 || stepIndex >= state.steps.length) return false;
+  const currentRaw = state.steps[stepIndex].rawLineNumber;
+  const previousRaw = stepIndex > 0 ? state.steps[stepIndex - 1].rawLineNumber : 0;
+  return state.threadMarkers.some((m) => m.rawLineNumber > previousRaw && m.rawLineNumber <= currentRaw);
 }
 
 function hasSteps() {
@@ -95,26 +127,56 @@ function formatDuration(seconds) {
     : `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
-function setSlot(el, stepObj, isCurrent = false) {
+function setSlot(el, stepObj, isCurrent = false, showThreadBoundary = false) {
   if (!stepObj) {
     el.textContent = "—";
     el.classList.add("placeholder");
     return;
   }
 
-  el.textContent = isCurrent
-    ? `RAW ${stepObj.rawLineNumber}\nNail ${stepObj.value}`
-    : `L${stepObj.rawLineNumber}\n#${stepObj.value}`;
+  const thread = getThreadForRawLine(stepObj.rawLineNumber);
+  const threadSwatch = thread
+    ? `<span class="thread-swatch" style="background-color: rgb(${thread.r}, ${thread.g}, ${thread.b})" title="Thread color rgb(${thread.r}, ${thread.g}, ${thread.b})" aria-hidden="true"></span>`
+    : "";
+
+  if (isCurrent) {
+    const threadLine = thread
+      ? `<div class="current-thread">${threadSwatch}<span>Thread color: rgb(${thread.r}, ${thread.g}, ${thread.b})</span></div>`
+      : `<div class="current-thread">Thread color: —</div>`;
+    el.innerHTML = `
+      <div class="current-line">Line ${stepObj.rawLineNumber}</div>
+      <div class="current-value">${stepObj.value}</div>
+      ${threadLine}
+    `;
+  } else {
+    const boundaryIndicator = showThreadBoundary
+      ? `<span class="thread-boundary" title="Thread change before this step">${threadSwatch || '<span class="thread-swatch" aria-hidden="true"></span>'}</span>`
+      : "";
+    el.innerHTML = `
+      <div class="small-line">L${stepObj.rawLineNumber}</div>
+      <div class="small-value">#${stepObj.value}</div>
+      ${boundaryIndicator}
+    `;
+  }
+
   el.classList.remove("placeholder");
 }
 
 function renderNavigator() {
   const i = state.stepIndex;
-  setSlot(dom.slotPrev2, hasSteps() ? state.steps[i - 2] : null);
-  setSlot(dom.slotPrev1, hasSteps() ? state.steps[i - 1] : null);
-  setSlot(dom.slotCurrent, hasSteps() ? state.steps[i] : null, true);
-  setSlot(dom.slotNext1, hasSteps() ? state.steps[i + 1] : null);
-  setSlot(dom.slotNext2, hasSteps() ? state.steps[i + 2] : null);
+  const slots = [
+    { el: dom.slotPrev2, stepIndex: i - 2, current: false },
+    { el: dom.slotPrev1, stepIndex: i - 1, current: false },
+    { el: dom.slotCurrent, stepIndex: i, current: true },
+    { el: dom.slotNext1, stepIndex: i + 1, current: false },
+    { el: dom.slotNext2, stepIndex: i + 2, current: false },
+  ];
+
+  for (const slot of slots) {
+    const stepObj = hasSteps() ? state.steps[slot.stepIndex] : null;
+    const hasBoundary = stepObj ? startsNewThreadSection(slot.stepIndex) : false;
+    setSlot(slot.el, stepObj, slot.current, hasBoundary);
+  }
 }
 
 function getElapsedActiveSeconds() {
@@ -280,6 +342,7 @@ function persistState() {
       rawFileText: state.rawFileText,
       rawLineCount: state.rawLineCount,
       steps: state.steps,
+      threadMarkers: state.threadMarkers,
       stepIndex: state.stepIndex,
       highContrast: state.highContrast,
       largeFont: state.largeFont,
@@ -306,9 +369,11 @@ function restoreState() {
     if (state.rawFileText) {
       const parsedFile = parseStepFile(state.rawFileText);
       state.steps = parsedFile.steps;
+      state.threadMarkers = parsedFile.threadMarkers;
       state.rawLineCount = parsedFile.rawLines.length;
     } else {
       state.steps = Array.isArray(parsed.steps) ? parsed.steps : [];
+      state.threadMarkers = Array.isArray(parsed.threadMarkers) ? parsed.threadMarkers : [];
     }
   } catch (_err) {
     localStorage.removeItem(STORAGE_KEY);
@@ -472,7 +537,7 @@ function handleFileUpload(file) {
 
   reader.onload = () => {
     const fileText = typeof reader.result === "string" ? reader.result : "";
-    const { rawLines, steps } = parseStepFile(fileText);
+    const { rawLines, steps, threadMarkers } = parseStepFile(fileText);
 
     if (steps.length === 0) {
       dom.errorMessage.textContent = "No valid numeric steps found (lines with only an integer).";
@@ -490,6 +555,7 @@ function handleFileUpload(file) {
     state.rawFileText = fileText;
     state.rawLineCount = rawLines.length;
     state.steps = steps;
+    state.threadMarkers = threadMarkers;
     state.stepIndex = 0;
     dom.errorMessage.textContent = "";
     dom.hintMessage.textContent = "";
@@ -586,6 +652,7 @@ function clearStorage() {
   state.rawFileText = "";
   state.rawLineCount = 0;
   state.steps = [];
+  state.threadMarkers = [];
   state.stepIndex = 0;
   state.activeSession = null;
   state.sessionHistory = [];
