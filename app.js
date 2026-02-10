@@ -8,6 +8,7 @@ const state = {
   rawLineCount: 0,
   steps: [], // [{ value, text, rawLineNumber }]
   threadMarkers: [], // [{ rawLineNumber, r, g, b }]
+  threadStatusRawLine: null,
   stepIndex: 0,
   highContrast: false,
   largeFont: false,
@@ -20,6 +21,8 @@ const dom = {
   fileMeta: document.getElementById("fileMeta"),
   errorMessage: document.getElementById("errorMessage"),
   hintMessage: document.getElementById("hintMessage"),
+  threadSwatch: document.getElementById("threadSwatch"),
+  threadValue: document.getElementById("threadValue"),
   slotPrev2: document.getElementById("slotPrev2"),
   slotPrev1: document.getElementById("slotPrev1"),
   slotCurrent: document.getElementById("slotCurrent"),
@@ -51,6 +54,7 @@ const dom = {
 };
 
 let elapsedInterval = null;
+let threadToastTimeout = null;
 
 function getNowIso() {
   return new Date().toISOString();
@@ -62,16 +66,10 @@ function parseStepFile(fileText) {
   const steps = []; // 2)
   const threadMarkers = [];
   const threadRegex = /^Thread:\s*\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\s*$/;
+  const numericRegex = /^[0-9]+$/;
 
   for (let i = 0; i < rawLines.length; i += 1) {
     const t = rawLines[i].trim(); // 3)
-    if (/^[0-9]+$/.test(t)) {
-      steps.push({
-        value: Number(t),
-        rawLineNumber: i + 1,
-      });
-      continue;
-    }
 
     const threadMatch = t.match(threadRegex);
     if (threadMatch) {
@@ -81,10 +79,32 @@ function parseStepFile(fileText) {
         g: Number(threadMatch[2]),
         b: Number(threadMatch[3]),
       });
+      continue;
+    }
+
+    if (numericRegex.test(t)) {
+      steps.push({
+        value: Number(t),
+        text: t,
+        rawLineNumber: i + 1,
+      });
+      continue;
     }
   }
+
+  // Dev sanity check: ensure an immediate numeric line after a thread marker is not skipped.
+  const stepLineSet = new Set(steps.map((step) => step.rawLineNumber));
+  for (let i = 0; i < rawLines.length - 1; i += 1) {
+    const current = rawLines[i].trim();
+    const next = rawLines[i + 1].trim();
+    if (threadRegex.test(current) && numericRegex.test(next) && !stepLineSet.has(i + 2)) {
+      console.warn(`[parser-check] Missing numeric step immediately after thread marker at line ${i + 1}.`);
+    }
+  }
+
   return { rawLines, steps, threadMarkers };
 }
+
 
 function getThreadForRawLine(rawLineNumber) {
   if (!rawLineNumber) return null;
@@ -96,11 +116,98 @@ function getThreadForRawLine(rawLineNumber) {
   return current;
 }
 
-function startsNewThreadSection(stepIndex) {
-  if (stepIndex < 0 || stepIndex >= state.steps.length) return false;
-  const currentRaw = state.steps[stepIndex].rawLineNumber;
-  const previousRaw = stepIndex > 0 ? state.steps[stepIndex - 1].rawLineNumber : 0;
-  return state.threadMarkers.some((m) => m.rawLineNumber > previousRaw && m.rawLineNumber <= currentRaw);
+function findStepIndexByRawLine(rawLineNumber) {
+  return state.steps.findIndex((s) => s.rawLineNumber === rawLineNumber);
+}
+
+function findNextStepIndexAfterRawLine(rawLineNumber) {
+  return state.steps.findIndex((s) => s.rawLineNumber > rawLineNumber);
+}
+
+
+function formatRGB(marker) {
+  return `[${marker.r}, ${marker.g}, ${marker.b}]`;
+}
+
+function getThreadMarkerBetweenSteps(leftStepIndex, rightStepIndex) {
+  if (leftStepIndex < 0 || rightStepIndex < 0) return null;
+  const leftRaw = state.steps[leftStepIndex]?.rawLineNumber;
+  const rightRaw = state.steps[rightStepIndex]?.rawLineNumber;
+  if (!leftRaw || !rightRaw) return null;
+  return state.threadMarkers.find((m) => m.rawLineNumber > leftRaw && m.rawLineNumber <= rightRaw) || null;
+}
+
+function buildNavigatorItems() {
+  if (!hasSteps()) {
+    return { prev2: null, prev1: null, current: null, next1: null, next2: null };
+  }
+
+  const currentIndex = state.stepIndex;
+  const leftItems = [];
+  for (let li = currentIndex - 1; li >= 0 && leftItems.length < 2; li -= 1) {
+    const marker = getThreadMarkerBetweenSteps(li, li + 1);
+    if (marker && leftItems.length < 2) {
+      leftItems.push({ type: "thread", marker });
+    }
+    if (leftItems.length < 2) {
+      leftItems.push({ type: "step", step: state.steps[li] });
+    }
+  }
+
+  const rightItems = [];
+  for (let ri = currentIndex + 1; ri < state.steps.length && rightItems.length < 2; ri += 1) {
+    const marker = getThreadMarkerBetweenSteps(ri - 1, ri);
+    if (marker && rightItems.length < 2) {
+      rightItems.push({ type: "thread", marker });
+    }
+    if (rightItems.length < 2) {
+      rightItems.push({ type: "step", step: state.steps[ri] });
+    }
+  }
+
+  return {
+    prev2: leftItems[1] || null,
+    prev1: leftItems[0] || null,
+    current: { type: "step", step: state.steps[currentIndex] },
+    next1: rightItems[0] || null,
+    next2: rightItems[1] || null,
+  };
+}
+
+function ensureThreadToast() {
+  let el = document.getElementById("threadToast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "threadToast";
+    el.className = "thread-toast";
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function showThreadChangeToast(marker) {
+  if (!marker) return;
+  const toast = ensureThreadToast();
+  toast.innerHTML = `<span class="thread-swatch" style="background-color: rgb(${marker.r}, ${marker.g}, ${marker.b})" aria-hidden="true"></span><span>Thread changed to ${formatRGB(marker)}</span>`;
+  toast.classList.add("show");
+  if (threadToastTimeout) clearTimeout(threadToastTimeout);
+  threadToastTimeout = setTimeout(() => {
+    toast.classList.remove("show");
+  }, 2000);
+}
+
+function renderThreadStatus() {
+  const rawLine = state.threadStatusRawLine ?? (hasSteps() ? state.steps[state.stepIndex]?.rawLineNumber : null);
+  const thread = getThreadForRawLine(rawLine || null);
+  if (thread) {
+    dom.threadSwatch.style.backgroundColor = `rgb(${thread.r}, ${thread.g}, ${thread.b})`;
+    dom.threadSwatch.classList.remove("thread-swatch-default");
+    dom.threadValue.textContent = formatRGB(thread);
+  } else {
+    dom.threadSwatch.style.backgroundColor = "";
+    dom.threadSwatch.classList.add("thread-swatch-default");
+    dom.threadValue.textContent = "—";
+  }
 }
 
 function hasSteps() {
@@ -126,56 +233,38 @@ function formatDuration(seconds) {
     : `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
-function setSlot(el, stepObj, isCurrent = false, showThreadBoundary = false) {
-  if (!stepObj) {
+function setSlot(el, item, isCurrent = false) {
+  if (!item) {
     el.textContent = "—";
     el.classList.add("placeholder");
     return;
   }
 
-  const thread = getThreadForRawLine(stepObj.rawLineNumber);
-  const threadSwatch = thread
-    ? `<span class="thread-swatch" style="background-color: rgb(${thread.r}, ${thread.g}, ${thread.b})" title="Thread [${thread.r},${thread.g},${thread.b}]" aria-hidden="true"></span>`
-    : `<span class="thread-swatch thread-swatch-default" aria-hidden="true"></span>`;
-
-  if (isCurrent) {
-    const threadLine = thread
-      ? `<div class="current-thread">${threadSwatch}<span>Thread: [${thread.r},${thread.g},${thread.b}]</span></div>`
-      : `<div class="current-thread">${threadSwatch}<span>Thread: —</span></div>`;
+  if (item.type === "thread") {
+    const marker = item.marker;
     el.innerHTML = `
-      <div class="current-line">Line ${stepObj.rawLineNumber}</div>
-      <div class="current-value">${stepObj.value}</div>
-      ${threadLine}
+      <div class="threadChangeTitle">Thread change</div>
+      <div class="threadChangeMeta"><span class="thread-swatch" style="background-color: rgb(${marker.r}, ${marker.g}, ${marker.b})" aria-hidden="true"></span><span>${formatRGB(marker)}</span></div>
     `;
-  } else {
-    const boundaryIndicator = showThreadBoundary
-      ? `<span class="thread-boundary" title="Thread change before this step">${threadSwatch || '<span class="thread-swatch" aria-hidden="true"></span>'}</span>`
-      : "";
-    el.innerHTML = `
-      <div class="small-line">L${stepObj.rawLineNumber}</div>
-      <div class="small-value">#${stepObj.value}</div>
-      ${boundaryIndicator}
-    `;
+    el.classList.remove("placeholder");
+    return;
   }
 
+  const stepObj = item.step;
+  el.innerHTML = `
+    <div class="cardLine">Line ${stepObj.rawLineNumber}</div>
+    <div class="cardValue">${stepObj.value}</div>
+  `;
   el.classList.remove("placeholder");
 }
 
 function renderNavigator() {
-  const i = state.stepIndex;
-  const slots = [
-    { el: dom.slotPrev2, stepIndex: i - 2, current: false },
-    { el: dom.slotPrev1, stepIndex: i - 1, current: false },
-    { el: dom.slotCurrent, stepIndex: i, current: true },
-    { el: dom.slotNext1, stepIndex: i + 1, current: false },
-    { el: dom.slotNext2, stepIndex: i + 2, current: false },
-  ];
-
-  for (const slot of slots) {
-    const stepObj = hasSteps() ? state.steps[slot.stepIndex] : null;
-    const hasBoundary = stepObj ? startsNewThreadSection(slot.stepIndex) : false;
-    setSlot(slot.el, stepObj, slot.current, hasBoundary);
-  }
+  const items = buildNavigatorItems();
+  setSlot(dom.slotPrev2, items.prev2, false);
+  setSlot(dom.slotPrev1, items.prev1, false);
+  setSlot(dom.slotCurrent, items.current, true);
+  setSlot(dom.slotNext1, items.next1, false);
+  setSlot(dom.slotNext2, items.next2, false);
 }
 
 function getElapsedActiveSeconds() {
@@ -342,6 +431,7 @@ function persistState() {
       rawLineCount: state.rawLineCount,
       steps: state.steps,
       threadMarkers: state.threadMarkers,
+      threadStatusRawLine: state.threadStatusRawLine,
       stepIndex: state.stepIndex,
       highContrast: state.highContrast,
       largeFont: state.largeFont,
@@ -360,6 +450,7 @@ function restoreState() {
     state.rawFileText = parsed.rawFileText || "";
     state.rawLineCount = Number.isInteger(parsed.rawLineCount) ? parsed.rawLineCount : 0;
     state.stepIndex = Number.isInteger(parsed.stepIndex) ? parsed.stepIndex : 0;
+    state.threadStatusRawLine = Number.isInteger(parsed.threadStatusRawLine) ? parsed.threadStatusRawLine : null;
     state.highContrast = Boolean(parsed.highContrast);
     state.largeFont = Boolean(parsed.largeFont);
     state.activeSession = parsed.activeSession || null;
@@ -383,6 +474,7 @@ function renderAll() {
   clampStepIndex();
   renderFileMeta();
   renderNavigator();
+  renderThreadStatus();
   renderMetrics();
   renderHistory();
   updateControls();
@@ -486,7 +578,17 @@ function moveStep(newIndex, direction) {
   if (bounded === state.stepIndex) return;
 
   const from = state.stepIndex;
+  const fromRawLine = state.steps[from]?.rawLineNumber ?? null;
+  const toRawLine = state.steps[bounded]?.rawLineNumber ?? null;
   state.stepIndex = bounded;
+  state.threadStatusRawLine = null;
+
+  if (direction === "next" && fromRawLine && toRawLine) {
+    const crossedMarker = state.threadMarkers.find((m) => m.rawLineNumber > fromRawLine && m.rawLineNumber <= toRawLine);
+    if (crossedMarker) {
+      showThreadChangeToast(crossedMarker);
+    }
+  }
 
   // Step position always updates; timestamps only while session running.
   if (state.activeSession) {
@@ -521,13 +623,28 @@ function handleJumpToRawLine() {
   dom.errorMessage.textContent = "";
   dom.hintMessage.textContent = "";
 
-  const exactIndex = state.steps.findIndex((s) => s.rawLineNumber === rawLine);
+  const exactIndex = findStepIndexByRawLine(rawLine);
   if (exactIndex >= 0) {
     moveStep(exactIndex, exactIndex >= state.stepIndex ? "next" : "back");
     return;
   }
 
-  dom.errorMessage.textContent = "No step on that raw line.";
+  const nextIndex = findNextStepIndexAfterRawLine(rawLine);
+  if (nextIndex < 0) {
+    dom.errorMessage.textContent = "No step found after that line.";
+    return;
+  }
+
+  const threadMarker = state.threadMarkers.find((m) => m.rawLineNumber === rawLine);
+  if (threadMarker) {
+    dom.hintMessage.textContent = `Thread change at line ${rawLine}. Jumped to step at line ${state.steps[nextIndex].rawLineNumber}.`;
+  } else {
+    dom.hintMessage.textContent = `No step on line ${rawLine}. Jumped to line ${state.steps[nextIndex].rawLineNumber}.`;
+  }
+
+  moveStep(nextIndex, nextIndex >= state.stepIndex ? "next" : "back");
+  state.threadStatusRawLine = rawLine;
+  renderAll();
 }
 
 function handleFileUpload(file) {
@@ -555,6 +672,7 @@ function handleFileUpload(file) {
     state.rawLineCount = rawLines.length;
     state.steps = steps;
     state.threadMarkers = threadMarkers;
+    state.threadStatusRawLine = null;
     state.stepIndex = 0;
     dom.errorMessage.textContent = "";
     dom.hintMessage.textContent = "";
@@ -573,6 +691,7 @@ function resetProgress() {
   if (!confirm("Reset progress and end active session?")) return;
   if (state.activeSession) endSession(true);
   state.stepIndex = 0;
+  state.threadStatusRawLine = null;
   dom.errorMessage.textContent = "";
   dom.hintMessage.textContent = "";
   renderAll();
@@ -652,6 +771,7 @@ function clearStorage() {
   state.rawLineCount = 0;
   state.steps = [];
   state.threadMarkers = [];
+  state.threadStatusRawLine = null;
   state.stepIndex = 0;
   state.activeSession = null;
   state.sessionHistory = [];
