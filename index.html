@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>String Art Line Tracker</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>String Art Line Tracker</h1>
+      <p class="subtitle">Track by raw file line number + nail number.</p>
+    </header>
+
+    <main class="layout" aria-label="String art tracker app">
+      <section class="main-panel">
+        <section class="card file-card" aria-label="Instruction file loader">
+          <div class="file-row">
+            <label for="fileInput">Instruction file (.txt)</label>
+            <input id="fileInput" type="file" accept=".txt,text/plain" />
+          </div>
+          <div id="fileMeta" class="file-meta" aria-live="polite">No file loaded.</div>
+          <div id="errorMessage" class="error" role="alert" aria-live="assertive"></div>
+          <div id="hintMessage" class="hint" aria-live="polite"></div>
+        </section>
+
+        <section class="card" aria-label="5-step preview navigator">
+          <div class="navigator" role="group" aria-label="Previous and upcoming steps">
+            <div class="nav-step small" id="slotPrev2"></div>
+            <div class="nav-step small" id="slotPrev1"></div>
+            <div class="nav-step current" id="slotCurrent"></div>
+            <div class="nav-step small" id="slotNext1"></div>
+            <div class="nav-step small" id="slotNext2"></div>
+          </div>
+        </section>
+
+        <section class="card primary-controls" aria-label="Primary navigation controls">
+          <div class="control-cluster">
+            <button id="backBtn" class="btn btn-back" aria-label="Go back one step">Back</button>
+            <button id="nextBtn" class="btn btn-next" aria-label="Go forward one step">Next</button>
+          </div>
+
+          <div class="control-row">
+            <label for="jumpInput">Jump to RAW line</label>
+            <input id="jumpInput" type="number" min="1" step="1" inputmode="numeric" />
+            <button id="jumpBtn" class="btn">Go</button>
+          </div>
+
+          <div class="control-row">
+            <button id="startPauseBtn" class="btn">Start</button>
+            <button id="endSessionBtn" class="btn btn-warning">End Session</button>
+            <button id="resetBtn" class="btn btn-danger">Reset</button>
+          </div>
+        </section>
+
+        <details class="card info-drawer" aria-label="Progress and timing info">
+          <summary>Info</summary>
+          <div class="info-grid">
+            <div>
+              <p id="stepText" class="metric-text">Step 0 of 0</p>
+              <p id="percentText" class="metric-text">0.0% complete</p>
+              <div class="progress" aria-hidden="true">
+                <div id="progressBar" class="progress-bar"></div>
+              </div>
+              <p id="remainingText" class="metric-text">Remaining: 0</p>
+              <p id="etaText" class="metric-text">ETA: —</p>
+            </div>
+            <div>
+              <p id="elapsedText" class="metric-text">Elapsed: 00:00</p>
+              <p id="currentPaceText" class="metric-text">Current pace: — spm</p>
+              <p id="averagePaceText" class="metric-text">Average pace: — spm</p>
+              <p id="trendText" class="metric-text">Trend: —</p>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <aside class="side-panel">
+        <details open class="card">
+          <summary>Session History</summary>
+          <div class="history-actions">
+            <button id="exportTransitionsBtn" class="btn">Export Current Session CSV</button>
+            <button id="exportHistoryBtn" class="btn">Export History CSV</button>
+          </div>
+          <div id="sessionHistory" class="history-list" aria-live="polite"></div>
+        </details>
+
+        <details class="card">
+          <summary>Settings</summary>
+          <div class="settings-row">
+            <button id="contrastToggleBtn" class="btn">Toggle High Contrast</button>
+            <button id="fontToggleBtn" class="btn">Toggle Large Font</button>
+          </div>
+          <div class="settings-row">
+            <label for="notesInput">Current session notes</label>
+            <textarea id="notesInput" rows="3" placeholder="Optional notes"></textarea>
+          </div>
+          <div class="settings-row">
+            <button id="clearStorageBtn" class="btn btn-danger">Clear Storage</button>
+          </div>
+        </details>
+      </aside>
+    </main>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
